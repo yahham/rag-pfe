@@ -1,8 +1,51 @@
+import os
 import string
+import pickle
 from nltk.stem import PorterStemmer
-from .search_utils import load_movies, load_stopwords
+from collections import defaultdict
+from .search_utils import (
+    load_movies, 
+    load_stopwords, 
+    CACHE_PATH
+)
 
 stemmer = PorterStemmer()
+
+class InvertedIndex:
+    def __init__(self):
+        self.index          = defaultdict(set)
+        self.docmap         = {}
+        self.index_path     = CACHE_PATH/"index.pkl"
+        self.docmap_path    = CACHE_PATH/"docmap.pkl"
+
+    def __add_document(self, doc_id, text):
+            tokens = tokenize_text(text)
+            for token in set(tokens):
+                self.index[token].add(doc_id)  
+
+    def get_documents(self, term):
+        return sorted(list(self.index[term]))
+
+    def build(self):
+        movies = load_movies()
+        for movie in movies:
+            doc_id = movie["id"]
+            text = f"{movie['title']} {movie['description']}" 
+            self.__add_document(doc_id, text)
+            self.docmap[doc_id] = movie
+
+    def save(self):
+        os.makedirs(CACHE_PATH, exist_ok=True)
+        with open(self.index_path, "wb") as f:
+            pickle.dump(self.index, f)
+        with open(self.docmap_path, "wb") as f:
+            pickle.dump(self.docmap, f)
+
+    def load(self):
+        with open(self.index_path, "rb") as f:
+            self.index  = pickle.load(f)
+        with open(self.docmap_path, "rb") as f:
+            self.docmap = pickle.load(f)
 
 def clean_text(text):
     text = text.lower() 
@@ -31,14 +74,25 @@ def has_matching_token(query_tokens, movie_tokens):
                 return True
     return False
 
-def search_command(query, n_results):
+def build_command():
+    idx = InvertedIndex()
+    idx.build()
+    idx.save()
+
+def search_command(query, n_results=5):
     movies = load_movies()
-    result = []
+    idx = InvertedIndex()
+    idx.load()
+    seen, result = set(), []
     query_tokens = tokenize_text(query)
-    for movie in movies:
-        movie_tokens = tokenize_text(movie["title"])
-        if has_matching_token(query_tokens, movie_tokens):
-            result.append(movie)
-        if len(result) == n_results:
-            break
+    for query_token in query_tokens:
+        matching_doc_ids = idx.get_documents(query_token)
+        for matching_doc_id in matching_doc_ids:
+            if matching_doc_id in seen:
+                continue
+            seen.add(matching_doc_id)
+            matching_doc = idx.docmap[matching_doc_id]
+            result.append(matching_doc)
+            if len(result) >= n_results:
+                return result
     return result
