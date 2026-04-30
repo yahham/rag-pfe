@@ -8,19 +8,22 @@ from .search_utils import load_movies, load_stopwords, CACHE_PATH, BM25_K1, BM25
 
 stemmer = PorterStemmer()
 
+
 class InvertedIndex:
     """In-memory inverted index with TF, IDF, TF-IDF, and BM25 support."""
 
     def __init__(self):
-        self.index                 = defaultdict(set)
-        self.docmap                = {}
-        self.term_frequencies      = defaultdict(Counter)
-        self.doc_lengths           = {}
-        self._avg_doc_length: float | None = None  # Cached on build(); invalidated on load()
-        self.index_path            = CACHE_PATH / "index.pkl"
-        self.docmap_path           = CACHE_PATH / "docmap.pkl"
+        self.index = defaultdict(set)
+        self.docmap = {}
+        self.term_frequencies = defaultdict(Counter)
+        self.doc_lengths = {}
+        self._avg_doc_length: float | None = (
+            None  # Cached on build(); invalidated on load()
+        )
+        self.index_path = CACHE_PATH / "index.pkl"
+        self.docmap_path = CACHE_PATH / "docmap.pkl"
         self.term_frequencies_path = CACHE_PATH / "term_frequencies.pkl"
-        self.doc_lengths_path      = CACHE_PATH / "doc_lengths.pkl"
+        self.doc_lengths_path = CACHE_PATH / "doc_lengths.pkl"
 
     def _add_document(self, doc_id: int, text: str) -> None:
         """Tokenize text and add the document to the index."""
@@ -76,7 +79,9 @@ class InvertedIndex:
         tf = self.get_tf(doc_id, term)
         doc_length = self.doc_lengths[doc_id]
         avg_doc_length = self._get_avg_doc_length()
-        length_norm = (1 - b + b * (doc_length / avg_doc_length)) if avg_doc_length > 0 else 1.0
+        length_norm = (
+            (1 - b + b * (doc_length / avg_doc_length)) if avg_doc_length > 0 else 1.0
+        )
         return (tf * (k1 + 1)) / (tf + k1 * length_norm)
 
     def get_bm25_idf(self, term: str) -> float:
@@ -110,7 +115,12 @@ class InvertedIndex:
                 scores[doc_id] += self.get_bm25(doc_id, token)
         top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:limit]
         return [
-            {"doc_id": doc_id, "title": self.docmap[doc_id]["title"], "score": score}
+            {
+                "doc_id": doc_id,
+                "title": self.docmap[doc_id]["title"],
+                "score": score,
+                "description": self.docmap[doc_id]["description"],
+            }
             for doc_id, score in top
         ]
 
@@ -165,11 +175,13 @@ class InvertedIndex:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def clean_text(text: str) -> str:
     """Lowercase and strip punctuation from text."""
     text = text.lower()
     text = text.translate(str.maketrans("", "", string.punctuation))
     return text
+
 
 def tokenize_text(text: str) -> list[str]:
     """Clean, filter stopwords, and stem the tokens in text."""
@@ -186,6 +198,7 @@ def tokenize_text(text: str) -> list[str]:
 # CLI command handlers
 # ---------------------------------------------------------------------------
 
+
 def build_command() -> None:
     """Build and save the inverted index from the movies dataset."""
     idx = InvertedIndex()
@@ -193,26 +206,37 @@ def build_command() -> None:
     idx.save()
     print(f"Index built and saved to '{CACHE_PATH}'.")
 
+
 def tf_command(doc_id: int, term: str) -> None:
     idx = InvertedIndex()
     idx.load()
-    print(f"Term frequency of '{term}' in document {doc_id}: {idx.get_tf(doc_id, term)}")
+    print(
+        f"Term frequency of '{term}' in document {doc_id}: {idx.get_tf(doc_id, term)}"
+    )
+
 
 def idf_command(term: str) -> None:
     idx = InvertedIndex()
     idx.load()
     print(f"Inverse document frequency of '{term}': {idx.get_idf(term):.4f}")
 
+
 def tfidf_command(doc_id: int, term: str) -> None:
     idx = InvertedIndex()
     idx.load()
-    print(f"TF-IDF score of '{term}' in document {doc_id}: {idx.get_tfidf(doc_id, term):.4f}")
+    print(
+        f"TF-IDF score of '{term}' in document {doc_id}: {idx.get_tfidf(doc_id, term):.4f}"
+    )
 
-def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B) -> float:
+
+def bm25_tf_command(
+    doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B
+) -> float:
     """Load the index and return the BM25 TF score for the given document and term."""
     idx = InvertedIndex()
     idx.load()
     return idx.get_bm25_tf(doc_id, term, k1, b)
+
 
 def bm25_idf_command(term: str) -> float:
     """Load the index and return the BM25 IDF score for the given term."""
@@ -220,11 +244,13 @@ def bm25_idf_command(term: str) -> float:
     idx.load()
     return idx.get_bm25_idf(term)
 
+
 def bm25_search(query: str, n_results: int = 5) -> list[dict]:
     """Load the index and return BM25-ranked results for the given query."""
     idx = InvertedIndex()
     idx.load()
     return idx.bm25_search(query, limit=n_results)
+
 
 def search_command(query: str, n_results: int = 5) -> list[dict]:
     """Return up to n_results movies whose index entries match the query tokens."""
