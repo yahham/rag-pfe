@@ -58,6 +58,12 @@ def main() -> None:
         default=5,
         help="Maximum number of results to return (default: 5)",
     )
+    rrf_search_parser.add_argument(
+        "--enhance",
+        type=str,
+        choices=["spell", "rewrite", "expand"],
+        help="Query enhancement method",
+    )
 
     args = parser.parse_args()
 
@@ -68,7 +74,7 @@ def main() -> None:
         case "weighted_search":
             weighted_search(args.query, args.alpha, args.limit)
         case "rrf_search":
-            rrf_search(args.query, args.k, args.limit)
+            rrf_search(args.query, args.k, args.limit, args.enhance)
         case _:
             parser.print_help()
 
