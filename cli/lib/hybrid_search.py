@@ -1,6 +1,7 @@
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
 from .search_utils import load_movies
+from .llm import augment_prompt
 
 
 class HybridSearch:
@@ -215,10 +216,16 @@ def _fmt_rank(rank: int | None) -> str:
     return str(rank) if rank is not None else "-"
 
 
-def rrf_search(query: str, k: int = 60, limit: int = 5) -> None:
+def rrf_search(
+    query: str, k: int = 60, limit: int = 5, enhance: str | None = None
+) -> None:
     """Run a Reciprocal Rank Fusion hybrid search and print ranked results."""
     movies = load_movies()
     hs = HybridSearch(movies)
+    if enhance:
+        enhanced_query = augment_prompt(query, enhance)
+        print(f"Enhanced query ({enhance}): '{query}' -> '{enhanced_query}'")
+        query = enhanced_query
     results = hs.rrf_search(query, k, limit)
     if not results:
         print(f"No results found for '{query}'.")
