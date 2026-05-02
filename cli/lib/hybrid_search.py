@@ -1,7 +1,8 @@
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
 from .search_utils import load_movies
-from .llm import augment_prompt
+from .llm import augment_query
+from .rerank import individual_rerank
 
 
 class HybridSearch:
@@ -217,24 +218,41 @@ def _fmt_rank(rank: int | None) -> str:
 
 
 def rrf_search(
-    query: str, k: int = 60, limit: int = 5, enhance: str | None = None
+    query: str,
+    k: int = 60,
+    limit: int = 5,
+    enhance: str | None = None,
+    rerank_method: str | None = None,
 ) -> None:
     """Run a Reciprocal Rank Fusion hybrid search and print ranked results."""
     movies = load_movies()
     hs = HybridSearch(movies)
+
     if enhance:
-        enhanced_query = augment_prompt(query, enhance)
+        enhanced_query = augment_query(query, enhance)
         print(f"Enhanced query ({enhance}): '{query}' -> '{enhanced_query}'")
         query = enhanced_query
-    results = hs.rrf_search(query, k, limit)
+
+    pool = limit * 5 if rerank_method else limit
+    results = hs.rrf_search(query, k, pool)
+
+    if rerank_method == "individual":
+        print(f"Reranking {len(results)} candidates with the individual method...")
+        results = individual_rerank(query, results, limit=limit)
+
     if not results:
         print(f"No results found for '{query}'.")
         return
+
     print(f"RRF results for '{query}' (k={k}):")
-    for i, result in enumerate(results, start=1):
+    for i, result in enumerate(results[:limit], start=1):
+        score_info = (
+            f"Rerank: {result['rerank_score']}/10  " if "rerank_score" in result else ""
+        )
         print(f"  {i}. {result['title']}")
         print(
-            f"     RRF Score: {result['rrf_score']:.4f}  "
+            f"     {score_info}"
+            f"RRF Score: {result['rrf_score']:.4f}  "
             f"BM25 Rank: {_fmt_rank(result['bm25_rank'])}  "
             f"Semantic Rank: {_fmt_rank(result['semantic_rank'])}"
         )
