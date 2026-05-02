@@ -1,28 +1,78 @@
 import os
+import time
+import logging
 from .search_utils import PROMPT_PATH
 from dotenv import load_dotenv
-from google import genai
+from openai import OpenAI, RateLimitError
 
 load_dotenv()
 
-_api_key = os.environ.get("GEMINI_API_KEY")
+_api_key = os.environ.get("OPENROUTER_API_KEY")
 if not _api_key:
     raise EnvironmentError(
-        "GEMINI_API_KEY is not set. Add it to your .env file or environment."
+        "OPENROUTER_API_KEY is not set. Add it to your .env file or environment."
     )
 
-MODEL = "gemini-3-flash-preview"
-client = genai.Client(api_key=_api_key)
+MODEL = "openai/gpt-oss-120b:free"
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=_api_key,
+)
+
+logger = logging.getLogger(__name__)
+
+_MAX_RETRIES = 4
+_RETRY_BASE_DELAY = 2.0  # seconds; doubles on each attempt
+
+
+def call_llm(content: str) -> str:
+    """Send a pre-formatted message to the LLM and return the text response.
+
+    Retries up to _MAX_RETRIES times with exponential backoff when the provider
+    is rate-limited, either via a RateLimitError exception or a None choices
+    payload (OpenRouter's behaviour for upstream 429s).
+    """
+    delay = _RETRY_BASE_DELAY
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": content}],
+                extra_body={"reasoning": {"enabled": True}},
+            )
+        except RateLimitError:
+            response = None
+
+        if response is not None and response.choices:
+            text = response.choices[0].message.content
+            if text is not None:
+                return text
+
+        if attempt == _MAX_RETRIES:
+            raise RuntimeError(
+                f"LLM did not return a valid response after {_MAX_RETRIES} attempts. "
+                "The upstream provider may be rate-limited — wait a moment and retry, "
+                "or add your own API key at https://openrouter.ai/settings/integrations."
+            )
+
+        logger.warning(
+            "No valid response from provider (attempt %d/%d). Retrying in %.0fs.",
+            attempt,
+            _MAX_RETRIES,
+            delay,
+        )
+        time.sleep(delay)
+        delay *= 2
+
+    raise RuntimeError("Unreachable")
 
 
 def generate_content(prompt: str, query: str) -> str:
     """Format prompt with query and return the model's text response."""
-    formatted = prompt.format(query=query)
-    response = client.models.generate_content(model=MODEL, contents=formatted)
-    return response.text
+    return call_llm(prompt.format(query=query))
 
 
-def _augment_query(query: str, prompt_type: str) -> str:
+def augment_query(query: str, prompt_type: str) -> str:
     """Load the prompt file for prompt_type and return the LLM-enhanced query."""
     prompt_file = PROMPT_PATH / f"{prompt_type}.md"
     if not prompt_file.exists():
@@ -42,14 +92,14 @@ def _augment_query(query: str, prompt_type: str) -> str:
 
 def correct_spelling(query: str) -> str:
     """Return a spelling-corrected version of query."""
-    return _augment_query(query, "spelling")
+    return augment_query(query, "spelling")
 
 
 def rewrite_query(query: str) -> str:
     """Return a rewritten version of query for improved retrieval."""
-    return _augment_query(query, "rewrite")
+    return augment_query(query, "rewrite")
 
 
 def expand_query(query: str) -> str:
     """Return an expanded version of query with additional relevant terms."""
-    return _augment_query(query, "expand")
+    return augment_query(query, "expand")
