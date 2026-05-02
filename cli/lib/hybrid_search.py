@@ -2,7 +2,7 @@ from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
 from .search_utils import load_movies
 from .llm import augment_query
-from .rerank import individual_rerank
+from .rerank import individual_rerank, batch_rerank, cross_encoder_rerank
 
 
 class HybridSearch:
@@ -239,21 +239,26 @@ def rrf_search(
     if rerank_method == "individual":
         print(f"Reranking {len(results)} candidates with the individual method...")
         results = individual_rerank(query, results, limit=limit)
-
+    elif rerank_method == "batch":
+        print(f"Reranking {len(results)} candidates with the batch method...")
+        results = batch_rerank(query, results, limit=limit)
+    elif rerank_method == "cross_encoder":
+        print(f"Reranking {len(results)} candidates with the cross_encoder method...")
+        results = cross_encoder_rerank(query, results, limit=limit)
     if not results:
         print(f"No results found for '{query}'.")
         return
 
     print(f"RRF results for '{query}' (k={k}):")
     for i, result in enumerate(results[:limit], start=1):
-        score_info = (
-            f"Rerank: {result['rerank_score']}/10  " if "rerank_score" in result else ""
-        )
         print(f"  {i}. {result['title']}")
-        print(
-            f"     {score_info}"
-            f"RRF Score: {result['rrf_score']:.4f}  "
-            f"BM25 Rank: {_fmt_rank(result['bm25_rank'])}  "
-            f"Semantic Rank: {_fmt_rank(result['semantic_rank'])}"
-        )
+        score_parts = []
+        if "rerank_score" in result:
+            score_parts.append(f"Rerank: {result['rerank_score']}/10")
+        if "cross_encoder_score" in result:
+            score_parts.append(f"Cross Encoder: {result['cross_encoder_score']:.4f}")
+        score_parts.append(f"RRF Score: {result['rrf_score']:.4f}")
+        score_parts.append(f"BM25 Rank: {_fmt_rank(result['bm25_rank'])}")
+        score_parts.append(f"Semantic Rank: {_fmt_rank(result['semantic_rank'])}")
+        print(f"     {'  '.join(score_parts)}")
         print(f"     {result['description'][:100]}")
