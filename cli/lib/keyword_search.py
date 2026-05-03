@@ -1,5 +1,6 @@
 import os
 import math
+from pathlib import Path
 import string
 import pickle
 from nltk.stem import PorterStemmer
@@ -12,18 +13,17 @@ stemmer = PorterStemmer()
 class InvertedIndex:
     """In-memory inverted index with TF, IDF, TF-IDF, and BM25 support."""
 
-    def __init__(self):
+    def __init__(self, cache_dir: Path | None = None):
+        cache = cache_dir if cache_dir is not None else CACHE_PATH
         self.index = defaultdict(set)
         self.docmap = {}
         self.term_frequencies = defaultdict(Counter)
         self.doc_lengths = {}
-        self._avg_doc_length: float | None = (
-            None  # Cached on build(); invalidated on load()
-        )
-        self.index_path = CACHE_PATH / "index.pkl"
-        self.docmap_path = CACHE_PATH / "docmap.pkl"
-        self.term_frequencies_path = CACHE_PATH / "term_frequencies.pkl"
-        self.doc_lengths_path = CACHE_PATH / "doc_lengths.pkl"
+        self._avg_doc_length: float | None = None
+        self.index_path = cache / "index.pkl"
+        self.docmap_path = cache / "docmap.pkl"
+        self.term_frequencies_path = cache / "term_frequencies.pkl"
+        self.doc_lengths_path = cache / "doc_lengths.pkl"
 
     def _add_document(self, doc_id: int, text: str) -> None:
         """Tokenize text and add the document to the index."""
@@ -124,15 +124,20 @@ class InvertedIndex:
             for doc_id, score in top
         ]
 
-    def build(self) -> None:
-        """Load the movies dataset and build the index from scratch."""
-        movies = load_movies()
-        for movie in movies:
-            doc_id = movie["id"]
-            text = f"{movie['title']} {movie['description']}"
+    def build(self, documents: list[dict] | None = None) -> None:
+        """Load documents and build the index from scratch.
+
+        If documents is None, falls back to load_movies() for backwards
+        compatibility with the existing movie search CLI.
+        """
+        if documents is None:
+            documents = load_movies()
+        for doc in documents:
+            doc_id = doc["id"]
+            text = f"{doc['title']} {doc['description']}"
             self._add_document(doc_id, text)
-            self.docmap[doc_id] = movie
-        self._avg_doc_length = None  # Reset cache so it is recomputed from fresh data
+            self.docmap[doc_id] = doc
+        self._avg_doc_length = None  # reset cache so it recomputes from fresh data
 
     def save(self) -> None:
         """Persist the index, docmap, term frequencies, and document lengths to disk."""
