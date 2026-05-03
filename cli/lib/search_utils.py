@@ -1,3 +1,4 @@
+import os
 import json
 from pathlib import Path
 
@@ -7,6 +8,11 @@ MOVIES_PATH = DATA_PATH / "movies.json"
 STOPWORDS_PATH = DATA_PATH / "stopwords.txt"
 CACHE_PATH = PROJECT_ROOT / "cache"
 PROMPT_PATH = PROJECT_ROOT / "cli" / "lib" / "prompts"
+
+BEIR_DATASET_PATH = Path(
+    os.getenv("BEIR_DATASET_PATH", str(PROJECT_ROOT / "datasets" / "scifact"))
+)
+BEIR_CACHE_PATH = PROJECT_ROOT / "cache" / "beir"
 
 BM25_K1 = 1.5  # Term frequency saturation parameter. Typical range: 1.2–2.0.
 BM25_B = 0.75  # Document length normalization factor. Range: 0 (none) to 1 (full).
