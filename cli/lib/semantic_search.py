@@ -20,12 +20,13 @@ def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
 class SemanticSearch:
     """Semantic search over a document collection using sentence embeddings."""
 
-    def __init__(self) -> None:
+    def __init__(self, cache_dir: Path | None = None) -> None:
         self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         self.embeddings: np.ndarray | None = None
         self.documents: list[dict] | None = None
         self.document_map: dict[int, dict] = {}
-        self.embeddings_path: Path = CACHE_PATH / "movie_embeddings.npy"
+        _cache = cache_dir if cache_dir is not None else CACHE_PATH
+        self.embeddings_path: Path = _cache / "movie_embeddings.npy"
 
     def generate_embedding(self, text: str) -> np.ndarray:
         """Encode a single string into an embedding vector."""
@@ -84,12 +85,13 @@ class ChunkedSemanticSearch(SemanticSearch):
     """Semantic search that splits document descriptions into overlapping chunks
     before encoding, enabling finer-grained retrieval over long texts."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, cache_dir: Path | None = None) -> None:
+        super().__init__(cache_dir=cache_dir)
+        _cache = cache_dir if cache_dir is not None else CACHE_PATH
         self.chunk_embeddings: np.ndarray | None = None
-        self.chunk_embeddings_path: Path = CACHE_PATH / "chunk_embeddings.npy"
+        self.chunk_embeddings_path: Path = _cache / "chunk_embeddings.npy"
         self.chunk_metadata: list[dict] | None = None
-        self.chunk_metadata_path: Path = CACHE_PATH / "chunk_metadata.json"
+        self.chunk_metadata_path: Path = _cache / "chunk_metadata.json"
 
     def build_chunk_embeddings(self, documents: list[dict]) -> np.ndarray:
         """Chunk all document descriptions, encode the chunks, and save to disk."""
