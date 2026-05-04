@@ -21,7 +21,7 @@ class SemanticSearch:
     """Semantic search over a document collection using sentence embeddings."""
 
     def __init__(self, cache_dir: Path | None = None) -> None:
-        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        self.model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
         self.embeddings: np.ndarray | None = None
         self.documents: list[dict] | None = None
         self.document_map: dict[int, dict] = {}
