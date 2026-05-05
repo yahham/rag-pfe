@@ -1,7 +1,7 @@
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
 from .search_utils import load_movies
-from .llm import augment_query
+from .llm import augment_query, llm_judge
 from .rerank import individual_rerank, batch_rerank, cross_encoder_rerank
 
 
@@ -223,6 +223,7 @@ def rrf_search(
     limit: int = 5,
     enhance: str | None = None,
     rerank_method: str | None = None,
+    evaluate: bool = False,
 ) -> None:
     """Run a Reciprocal Rank Fusion hybrid search and print ranked results."""
     movies = load_movies()
@@ -245,10 +246,12 @@ def rrf_search(
     elif rerank_method == "cross_encoder":
         print(f"Reranking {len(results)} candidates with the cross_encoder method...")
         results = cross_encoder_rerank(query, results, limit=limit)
+
     if not results:
         print(f"No results found for '{query}'.")
         return
 
+    formatted_results: list[str] = []
     print(f"RRF results for '{query}' (k={k}):")
     for i, result in enumerate(results[:limit], start=1):
         print(f"  {i}. {result['title']}")
@@ -262,3 +265,15 @@ def rrf_search(
         score_parts.append(f"Semantic Rank: {_fmt_rank(result['semantic_rank'])}")
         print(f"     {'  '.join(score_parts)}")
         print(f"     {result['description'][:100]}")
+        if evaluate:
+            formatted_results.append(
+                f"<result id={i}>{result['title']}: {result['description'][:50]}</result>"
+            )
+
+    if evaluate:
+        print("\nLLM evaluation:")
+        llm_scores = llm_judge(query, "\n".join(formatted_results))
+        if llm_scores is not None:
+            for i, result in enumerate(results[:limit], start=1):
+                score = llm_scores[i - 1] if i - 1 < len(llm_scores) else "N/A"
+                print(f"  {i}. {result['title']}: {score}/3")
