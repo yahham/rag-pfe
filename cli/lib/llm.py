@@ -132,3 +132,41 @@ def llm_judge(query: str, formatted_results: str) -> list[int] | None:
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
         logger.warning("LLM judge: could not parse response (%s). Raw: %r", exc, raw)
         return None
+
+
+def _format_documents(documents: list[dict]) -> str:
+    """Serialize a list of search result dicts into a readable string for prompts."""
+    parts = []
+    for i, doc in enumerate(documents, start=1):
+        title = doc.get("title", "Unknown")
+        description = doc.get("description", "")
+        parts.append(f"[{i}] {title}\n{description}")
+    return "\n\n".join(parts)
+
+
+def answer_question(query: str, documents: list[dict]) -> str:
+    """Answer query using the provided documents as context."""
+    with open(PROMPT_PATH / "answer_question.md", "r") as f:
+        prompt = f.read()
+    return generate_content(prompt, query=query, docs=_format_documents(documents))
+
+
+def summarize_documents(query: str, documents: list[dict]) -> str:
+    """Summarize the provided documents in the context of query."""
+    with open(PROMPT_PATH / "summarization.md", "r") as f:
+        prompt = f.read()
+    return generate_content(prompt, query=query, docs=_format_documents(documents))
+
+
+def citations_documents(query: str, documents: list[dict]) -> str:
+    """Answer query with inline citations drawn from the provided documents."""
+    with open(PROMPT_PATH / "answer_with_citations.md", "r") as f:
+        prompt = f.read()
+    return generate_content(prompt, query=query, docs=_format_documents(documents))
+
+
+def answer_question_detailed(query: str, documents: list[dict]) -> str:
+    """Answer query in detail, following structured guidance from the prompt."""
+    with open(PROMPT_PATH / "answer_question_detailed.md", "r") as f:
+        prompt = f.read()
+    return generate_content(prompt, query=query, docs=_format_documents(documents))
