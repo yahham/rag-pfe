@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import logging
 from .search_utils import PROMPT_PATH
@@ -67,9 +68,11 @@ def call_llm(content: str) -> str:
     raise RuntimeError("Unreachable")
 
 
-def generate_content(prompt: str, query: str) -> str:
-    """Format prompt with query and return the model's text response."""
-    return call_llm(prompt.format(query=query))
+def generate_content(prompt: str, query: str, **kwargs) -> str:
+    """Format prompt with query and any additional keyword arguments, then return
+    the model's text response.
+    """
+    return call_llm(prompt.format(query=query, **kwargs))
 
 
 def augment_query(query: str, prompt_type: str) -> str:
@@ -103,3 +106,29 @@ def rewrite_query(query: str) -> str:
 def expand_query(query: str) -> str:
     """Return an expanded version of query with additional relevant terms."""
     return augment_query(query, "expand")
+
+
+def llm_judge(query: str, formatted_results: str) -> list[int] | None:
+    """Score each search result for relevance to query on a 0–3 scale.
+
+    Returns a list of integer scores in the same order as the results,
+    or None if the LLM response cannot be parsed.
+    """
+    with open(PROMPT_PATH / "llm_judge.md", "r") as f:
+        prompt = f.read()
+    raw = generate_content(prompt, query, formatted_results=formatted_results).strip()
+
+    # Strip markdown code fences if the model wraps its output.
+    if raw.startswith("```"):
+        raw = "\n".join(
+            line for line in raw.splitlines() if not line.startswith("```")
+        ).strip()
+
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list):
+            raise ValueError(f"Expected a JSON list, got {type(parsed).__name__}.")
+        return [max(0, min(3, int(s))) for s in parsed]
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        logger.warning("LLM judge: could not parse response (%s). Raw: %r", exc, raw)
+        return None
