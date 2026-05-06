@@ -218,9 +218,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Dataset
-data/
-datasets/
-
 # Cache
 cache/
