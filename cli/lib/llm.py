@@ -170,3 +170,97 @@ def answer_question_detailed(query: str, documents: list[dict]) -> str:
     with open(PROMPT_PATH / "answer_question_detailed.md", "r") as f:
         prompt = f.read()
     return generate_content(prompt, query=query, docs=_format_documents(documents))
+
+
+def answer_scientific(query: str, documents: list[dict]) -> str:
+    """Answer a scientific query using retrieved documents as context.
+
+    Uses a domain-neutral prompt suitable for BEIR scientific datasets,
+    unlike answer_question() which is tailored to the Hoopla movie domain.
+    """
+    with open(PROMPT_PATH / "answer_scientific.md", "r") as f:
+        prompt = f.read()
+    return generate_content(prompt, query=query, docs=_format_documents(documents))
+
+
+def faithfulness_judge(
+    query: str,
+    documents: list[dict],
+    answer: str,
+) -> dict | None:
+    """Judge whether a generated answer is faithful to its source documents.
+
+    Asks the LLM to identify factual claims in the answer and verify each one
+    against the retrieved documents. Returns a dict with:
+      total_claims      — number of factual claims identified in the answer
+      supported_claims  — number of those claims supported by the documents
+      faithfulness_score — supported_claims / total_claims  (float in [0, 1])
+
+    Returns None if the LLM response cannot be parsed.
+    """
+    with open(PROMPT_PATH / "faithfulness_judge.md", "r") as f:
+        prompt = f.read()
+    raw = generate_content(
+        prompt,
+        query=query,
+        docs=_format_documents(documents),
+        answer=answer,
+    ).strip()
+    if raw.startswith("```"):
+        raw = "\n".join(
+            line for line in raw.splitlines() if not line.startswith("```")
+        ).strip()
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Expected a JSON object, got {type(parsed).__name__}.")
+        return {
+            "total_claims": int(parsed["total_claims"]),
+            "supported_claims": int(parsed["supported_claims"]),
+            "faithfulness_score": float(parsed["faithfulness_score"]),
+        }
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Faithfulness judge: could not parse response (%s). Raw: %r", exc, raw
+        )
+        return None
+
+
+def generate_questions_from_answer(answer: str, n: int = 3) -> list[str] | None:
+    """Generate n questions that the given answer could plausibly be responding to.
+
+    Used in RAGAS-style answer relevance computation: if the generated answer
+    truly addresses the original question, the questions it implies should be
+    semantically close to that original question.
+
+    Returns a list of question strings, or None if the LLM response cannot
+    be parsed.
+    """
+    with open(PROMPT_PATH / "answer_relevance_questions.md", "r") as f:
+        prompt_template = f.read()
+
+    # This prompt does not follow the query/docs pattern of generate_content,
+    # so we format it manually and call call_llm directly.
+    formatted = prompt_template.format(answer=answer, n_questions=n)
+    raw = call_llm(formatted).strip()
+
+    if raw.startswith("```"):
+        raw = "\n".join(
+            line for line in raw.splitlines() if not line.startswith("```")
+        ).strip()
+
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list):
+            raise ValueError(f"Expected a JSON list, got {type(parsed).__name__}.")
+        questions = [str(q).strip() for q in parsed if str(q).strip()]
+        if not questions:
+            raise ValueError("Parsed list is empty.")
+        return questions
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        logger.warning(
+            "generate_questions_from_answer: could not parse response (%s). Raw: %r",
+            exc,
+            raw,
+        )
+        return None
