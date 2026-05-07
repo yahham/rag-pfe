@@ -264,3 +264,14 @@ def generate_questions_from_answer(answer: str, n: int = 3) -> list[str] | None:
             raw,
         )
         return None
+
+
+def answer_llm_only(query: str) -> str:
+    """Answer a query using only the LLM's parametric knowledge.
+
+    No retrieved documents are provided. Used to evaluate the LLM as a
+    standalone baseline, without any retrieval augmentation.
+    """
+    with open(PROMPT_PATH / "answer_llm_only.md", "r") as f:
+        prompt = f.read()
+    return call_llm(prompt.format(query=query))
